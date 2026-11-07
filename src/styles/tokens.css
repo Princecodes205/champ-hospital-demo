@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  /* Brand Colors */
+  --color-primary: #5500FF;
+  --color-primary-foreground: #FFFFFF;
+
+  /* Neutrals - Light Theme */
+  --background: #F9FAFB;
+  --foreground: #111827;
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #5500FF;
+
+  /* Status Colors */
+  --status-success: #166534;
+  --status-success-bg: #DCFCE7;
+  --status-error: #991B1B;
+  --status-error-bg: #FEE2E2;
+  --status-warning: #854D0E;
+  --status-warning-bg: #FEF3C7;
+}
+
+@theme {
+  --color-primary: var(--color-primary);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-control: 6px;
+  --radius-card: 8px;
+
+  --font-inter: "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-inter antialiased;
+    font-feature-settings: "tnum";
+  }
+}
