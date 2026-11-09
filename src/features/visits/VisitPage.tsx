@@ -112,7 +112,9 @@ export const VisitPage = ({
 
   const handleCompleteVisit = async () => {
     try {
-      const userId = (window as any).userId;
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
       if (!userId) {
         throw new Error("User session not found. Please log in again.");
       }
@@ -125,9 +127,10 @@ export const VisitPage = ({
         doctor_id: userId,
         prescriptions: prescriptionsForm,
       });
-      console.log("Visit completed successfully!");
+      alert("Visit completed successfully!");
     } catch (err: any) {
       console.error(err.message);
+      alert(`Error completing visit: ${err.message}`);
     }
   };
 
@@ -184,7 +187,9 @@ export const VisitPage = ({
 
   const handleSaveConsultation = async () => {
     try {
-      const userId = (window as any).userId;
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
       if (!userId) {
         throw new Error("User session not found. Please log in again.");
       }
@@ -204,9 +209,10 @@ export const VisitPage = ({
       });
 
       if (error) throw error;
-      console.log("Consultation saved successfully!");
+      alert("Consultation saved successfully!");
     } catch (err: any) {
       console.error(err.message);
+      alert(`Error saving consultation: ${err.message}`);
     }
   };
 
