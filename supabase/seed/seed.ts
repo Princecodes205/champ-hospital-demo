@@ -1,39 +1,67 @@
-import { createClient } from '@supabase/supabase-js';
-import * as dotenv from 'https://deno.land/std@0.200.0/dotenv/mod.ts';
+// @ts-ignore
+import { createClient } from "@supabase/supabase-js";
+// @ts-ignore
+import * as dotenv from "https://deno.land/std@0.200.0/dotenv/mod.ts";
 
+// @ts-ignore
 dotenv.load();
 
-const supabase = createClient(
-  Deno.env.get('VITE_SUPABASE_URL') || '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-);
+/**
+ * This file is executed by the Deno runtime.
+ * To stop the IDE (Node.js TS) from showing red lines,
+ * we access Deno via the globalThis object.
+ */
+const env = (globalThis as any).Deno?.env;
+
+const supabaseUrl = env?.get("SUPABASE_URL") || env?.get("VITE_SUPABASE_URL");
+const supabaseKey = env?.get("SUPABASE_SERVICE_ROLE_KEY");
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error(
+    "Missing environment variables: SUPABASE_URL (or VITE_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY are required.",
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function seed() {
-  const ownerUsername = Deno.env.get('SEED_OWNER_USERNAME') || 'admin';
-  const ownerPassword = Deno.env.get('SEED_OWNER_PASSWORD') || 'password123';
+  const ownerUsername = env?.get("SEED_OWNER_USERNAME") || "admin";
+  const ownerPassword = env?.get("SEED_OWNER_PASSWORD") || "password123";
 
-  console.log('Seeding initial owner...');
-  const { data: ownerUser, error: ownerError } = await supabase.auth.admin.createUser({
-    email: `${ownerUsername}@staff.champhospital.internal`,
-    password: ownerPassword,
-    email_confirm: true,
-    user_metadata: { username: ownerUsername }
-  });
+  console.log("Seeding initial owner...");
+  const { data: ownerUser, error: ownerError } =
+    await supabase.auth.admin.createUser({
+      email: `${ownerUsername}@staff.champhospital.internal`,
+      password: ownerPassword,
+      email_confirm: true,
+      user_metadata: { username: ownerUsername },
+    });
 
-  if (ownerError) throw ownerError;
+  if (ownerError || !ownerUser?.user)
+    throw ownerError || new Error("Failed to create owner user");
 
-  await supabase.from('profiles').insert({
+  await supabase.from("profiles").insert({
     id: ownerUser.user.id,
     username: ownerUsername,
-    full_name: 'Hospital Owner',
-    role: 'owner',
-    is_active: true
+    full_name: "Hospital Owner",
+    role: "owner",
+    is_active: true,
   });
 
-  console.log('Seeding demo staff...');
+  console.log("Seeding demo staff...");
   const staff = [
-    { username: 'dr_smith', password: 'password123', full_name: 'Dr. Smith', role: 'doctor' },
-    { username: 'nurse_jane', password: 'password123', full_name: 'Nurse Jane', role: 'nurse' },
+    {
+      username: "dr_smith",
+      password: "password123",
+      full_name: "Dr. Smith",
+      role: "doctor",
+    },
+    {
+      username: "nurse_jane",
+      password: "password123",
+      full_name: "Nurse Jane",
+      role: "nurse",
+    },
   ];
 
   for (const s of staff) {
@@ -41,19 +69,20 @@ async function seed() {
       email: `${s.username}@staff.champhospital.internal`,
       password: s.password,
       email_confirm: true,
-      user_metadata: { username: s.username }
+      user_metadata: { username: s.username },
     });
-    if (uErr) throw uErr;
-    await supabase.from('profiles').insert({
+    if (uErr || !user?.user)
+      throw uErr || new Error(`Failed to create user ${s.username}`);
+    await supabase.from("profiles").insert({
       id: user.user.id,
       username: s.username,
       full_name: s.full_name,
       role: s.role,
-      is_active: true
+      is_active: true,
     });
   }
 
-  console.log('Seeding completed successfully.');
+  console.log("Seeding completed successfully.");
 }
 
 seed().catch(console.error);

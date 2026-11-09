@@ -1,0 +1,34 @@
+{
+  "version": "5",
+  "remote": {
+    "https://deno.land/std@0.200.0/collections/filter_values.ts": "16e1fc456a7969e770ec5b89edf5ac97b295ca534b47c1a83f061b409aad7814",
+    "https://deno.land/std@0.200.0/collections/without_all.ts": "1e3cccb1ed0659455b473c0766d9414b7710d8cef48862c899f445178f66b779",
+    "https://deno.land/std@0.200.0/dotenv/mod.ts": "2caa157ee5afbf74bd85bd6e8f286cb6363a1e4d10cf3376223346b33a7ea75e"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@supabase/supabase-js@^2.119.0",
+        "npm:@tailwindcss/vite@^4.3.5",
+        "npm:@tanstack/react-query@^5.107.1",
+        "npm:@types/node@^24.19.2",
+        "npm:@types/react-dom@^19.3.0",
+        "npm:@types/react@^19.3.0",
+        "npm:@vitejs/plugin-react@^6.1.2",
+        "npm:autoprefixer@^10.6.2",
+        "npm:dotenv@^18.0.9",
+        "npm:lucide-react@^1.70.0",
+        "npm:oxlint@^1.90.0",
+        "npm:postcss@^8.5.32",
+        "npm:react-dom@^19.3.1",
+        "npm:react-router-dom@^7.18.5",
+        "npm:react@^19.3.1",
+        "npm:tailwindcss@^4.3.5",
+        "npm:typescript@~7.0.2",
+        "npm:vite-plugin-pwa@2",
+        "npm:vite@^8.3.6",
+        "npm:zod@^4.6.7"
+      ]
+    }
+  }
+}

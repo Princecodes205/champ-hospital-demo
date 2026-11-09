@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { QueryClient } from '@tanstack/react-query';
 
@@ -10,33 +10,30 @@ const SessionContext = createContext<SessionContextType | null>(null);
 
 export const SessionProvider: React.FC<{ children: React.ReactNode, queryClient: QueryClient }> = ({ children, queryClient }) => {
   const SESSION_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6 hours
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const logout = async () => {
+  const logout = React.useCallback(async () => {
     await supabase.auth.signOut();
     queryClient.clear();
     window.location.href = '/';
-  };
+  }, [queryClient]);
 
-  const resetTimer = () => {
+  const resetTimer = React.useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       console.log('Session expired due to inactivity.');
       logout();
     }, SESSION_TIMEOUT_MS);
-  };
+  }, [logout, SESSION_TIMEOUT_MS]);
 
   useEffect(() => {
-    // Events that count as activity
     const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
-
     const handleActivity = () => resetTimer();
 
     activityEvents.forEach(event => {
       window.addEventListener(event, handleActivity);
     });
 
-    // Start the first timer
     resetTimer();
 
     return () => {
@@ -45,7 +42,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode, queryClient:
         window.removeEventListener(event, handleActivity);
       });
     };
-  }, []);
+  }, [resetTimer]);
 
   return (
     <SessionContext.Provider value={{ logout }}>

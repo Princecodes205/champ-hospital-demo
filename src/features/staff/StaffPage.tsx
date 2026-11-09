@@ -11,14 +11,16 @@ export const StaffPage = () => {
   const [isAdding, setIsAdding] = useState(false);
 
   const fetchStaff = async () => {
-    setIsLoading(true);
     const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (!error && data) setStaff(data);
     setIsLoading(false);
   };
 
   React.useEffect(() => {
-    fetchStaff();
+    (async () => {
+      setIsLoading(true);
+      await fetchStaff();
+    })();
   }, []);
 
   const handleAddStaff = async (e: React.FormEvent) => {
