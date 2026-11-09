@@ -45,7 +45,7 @@ export const QueuePage = ({ onVisitClick }: { onVisitClick: (id: string) => void
     }
   };
 
-  const filterVisitsByDate = (visitsList: any[]) => {
+  const filterVisitsByDate = (visitsList: any[] | undefined) => {
     if (!visitsList) return [];
 
     const now = new Date();

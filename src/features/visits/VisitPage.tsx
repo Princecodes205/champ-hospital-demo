@@ -233,9 +233,9 @@ export const VisitPage = ({
       </div>
     );
   if (!visit) return <div className="p-8 text-center">Visit not found.</div>;
-    const cancelReasonText = (
-      visit as typeof visit & { cancel_reason?: string | null }
-    ).cancel_reason;
+  const cancelReasonText = (
+    visit as typeof visit & { cancel_reason?: string | null }
+  ).cancel_reason;
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
