@@ -22,18 +22,33 @@ export const RegisterPatientDialog = ({ isOpen, onClose, onSuccess }: { isOpen: 
       // 1. Validation FIRST (Avoid unnecessary DB calls)
       const validatedData = patientSchema.parse(formData);
 
-      // 2. Duplicate Check: Name and Phone
-      // Use a more robust check: trim whitespace and lowercase
-      const { data: duplicates } = await supabase
+      // 2. Duplicate Check: Name OR Phone
+      const trimmedName = formData.full_name?.trim() || '';
+      const trimmedPhone = formData.phone?.trim() || '';
+
+      // a) Strict Check: Phone number must be absolutely unique (Case-insensitive not applicable to numbers, but trim is)
+      const { data: phoneDuplicate } = await supabase
         .from('patients')
         .select('id')
-        .ilike('full_name', formData.full_name?.trim() || '')
-        .eq('phone', formData.phone?.trim() || '')
+        .eq('phone', trimmedPhone)
         .maybeSingle();
 
-      if (duplicates) {
-        throw new Error('A patient with this name and phone number already exists.');
+      if (phoneDuplicate) {
+        throw new Error('A patient with this phone number already exists.');
       }
+
+      // b) Strict Check: Full Name must be unique (Case-Insensitive)
+      // Use .ilike() to catch 'John Doe', 'john doe', 'JOHN DOE', etc.
+      const { data: nameDuplicate } = await supabase
+        .from('patients')
+        .select('id')
+        .ilike('full_name', trimmedName)
+        .maybeSingle();
+
+      if (nameDuplicate) {
+        throw new Error('A patient with this name already exists.');
+      }
+
 
       // 3. Unique Patient Number (PT-000001 style)
       const { data: lastPatient } = await supabase
