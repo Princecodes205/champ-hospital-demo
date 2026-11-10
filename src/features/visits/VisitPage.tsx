@@ -10,6 +10,7 @@ import {
 import { useVisit } from "./useVisit";
 import type { Drug, PrescriptionItem } from "../drugs/types";
 import { supabase } from "../../lib/supabase";
+import { formatNaira } from "../../lib/formatters";
 
 export const VisitPage = ({
   visitId,
@@ -57,6 +58,14 @@ export const VisitPage = ({
   const [filteredDrugs, setFilteredDrugs] = useState<Drug[]>([]);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [isAddChargeOpen, setIsAddChargeOpen] = useState(false);
+
+  // Charges (Stage 3)
+  const [chargeServiceId, setChargeServiceId] = useState("");
+  const [chargeQuantity, setChargeQuantity] = useState("1");
+  const [chargeError, setChargeError] = useState("");
+  const [allServices, setAllServices] = useState<any[]>([]);
+  const [visitCharges, setVisitCharges] = useState<any[]>([]);
 
   // Load drug catalog for search
   useEffect(() => {
@@ -108,7 +117,72 @@ export const VisitPage = ({
         })),
       );
     }
-  }, [vitals, consultation, prescriptions]);
+
+    // Load services and existing charges for this visit
+    if (visit) {
+      (async () => {
+        const { data } = await supabase
+          .from("services")
+          .select("*")
+          .eq("is_active", true)
+          .order("name", { ascending: true });
+        if (data) setAllServices(data as any[]);
+
+        const { data: charges } = await supabase
+          .from("visit_charges")
+          .select("*, services(name)")
+          .eq("visit_id", visitId)
+          .order("created_at", { ascending: true });
+        if (charges) setVisitCharges(charges as any[]);
+      })();
+    }
+  }, [vitals, consultation, prescriptions, visit]);
+
+  const handleAddCharge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChargeError("");
+    const serviceId = chargeServiceId;
+    const quantity = parseInt(chargeQuantity, 10);
+    if (!serviceId) {
+      setChargeError("Select a service.");
+      return;
+    }
+    if (isNaN(quantity) || quantity <= 0) {
+      setChargeError("Enter a valid quantity.");
+      return;
+    }
+    try {
+      await supabase.rpc("add_visit_charge", {
+        p_visit_id: visitId,
+        p_service_id: serviceId,
+        p_quantity: quantity,
+      });
+      setChargeServiceId("");
+      setChargeQuantity("1");
+      const { data: charges } = await supabase
+        .from("visit_charges")
+        .select("*, services(name)")
+        .eq("visit_id", visitId)
+        .order("created_at", { ascending: true });
+      if (charges) setVisitCharges(charges as any[]);
+    } catch (err: any) {
+      setChargeError(err.message || "Failed to add charge.");
+    }
+  };
+
+  const handleRemoveCharge = async (id: string) => {
+    try {
+      await supabase.from("visit_charges").delete().eq("id", id);
+      const { data: charges } = await supabase
+        .from("visit_charges")
+        .select("*, services(name)")
+        .eq("visit_id", visitId)
+        .order("created_at", { ascending: true });
+      if (charges) setVisitCharges(charges as any[]);
+    } catch (err: any) {
+      alert(err.message || "Failed to remove charge.");
+    }
+  };
 
   const handleCompleteVisit = async () => {
     try {
@@ -572,6 +646,94 @@ export const VisitPage = ({
           />
         </div>
       </section>
+
+      {/* Charges (Stage 3) — add billable services before the visit is completed. */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Charges</h2>
+          {visit.status !== "completed" && visit.status !== "cancelled" && (
+            <Button onClick={() => setIsAddChargeOpen(true)}>Add Charge</Button>
+          )}
+        </div>
+        <div
+          className={`p-4 border rounded-card bg-card space-y-4 ${visit.status === "completed" || visit.status === "cancelled" ? "opacity-70 pointer-events-none" : ""}`}
+        >
+          {chargeError && (
+            <div className="text-sm text-destructive">{chargeError}</div>
+          )}
+          {visitCharges.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No charges added yet.</div>
+          ) : (
+            <Table
+              columns={[
+                { header: "Service", accessor: "service_name" },
+                { header: "Qty", accessor: "quantity" },
+                { header: "Unit Price", accessor: "unit_price_kobo" },
+                { header: "Total", accessor: "line_total_kobo" },
+                { header: "Action", accessor: "action" },
+              ]}
+              data={visitCharges.map((c: any) => ({
+                ...c,
+                unit_price_kobo: formatNaira(c.unit_price_kobo),
+                line_total_kobo: formatNaira(
+                  (c.quantity as number) * (c.unit_price_kobo as number),
+                ),
+                action: (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveCharge(c.id as string)}
+                  >
+                    Remove
+                  </Button>
+                ),
+              }))}
+            />
+          )}
+        </div>
+      </section>
+
+      {/* Add Charge Dialog */}
+      <Dialog
+        isOpen={isAddChargeOpen}
+        onClose={() => setIsAddChargeOpen(false)}
+        title="Add Charge"
+      >
+        <form onSubmit={handleAddCharge} className="space-y-4">
+          <div className="flex flex-col gap-1.5 w-full">
+            <label className="text-sm font-medium text-foreground/80">Service</label>
+            <select
+              className="px-3 py-2 rounded-control border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              value={chargeServiceId}
+              onChange={(e) => setChargeServiceId(e.target.value)}
+              required
+            >
+              <option value="">Select a service</option>
+              {allServices.map((s: any) => (
+                <option key={s.id} value={s.id as string}>
+                  {s.name} — {formatNaira(s.unit_price_kobo)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Quantity"
+              type="number"
+              value={chargeQuantity}
+              onChange={(e) => setChargeQuantity(e.target.value)}
+              required
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The charge is snapshot at the service's current price and added to
+            the invoice when the visit is completed.
+          </p>
+          <Button type="submit" className="w-full" isLoading={isSaving}>
+            Add Charge
+          </Button>
+        </form>
+      </Dialog>
     </div>
   );
 };

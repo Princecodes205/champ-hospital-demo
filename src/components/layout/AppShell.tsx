@@ -37,9 +37,13 @@ export const AppShell = ({ children, user, onSignOut }: { children: React.ReactN
     { label: 'Staff', href: '/staff' },
     { label: 'Queue', href: '/queue' },
     { label: 'Patients', href: '/patients' },
+    { label: 'Invoices', href: '/invoices' },
+    { label: 'Services', href: '/services' },
+    { label: 'Settings', href: '/settings' },
   ] : [
     { label: 'Queue', href: '/queue' },
     { label: 'Patients', href: '/patients' },
+    { label: 'Invoices', href: '/invoices' },
   ];
 
   return (

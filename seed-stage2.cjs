@@ -285,6 +285,142 @@ async function seed() {
     }
   }
 
+  // 3b. Seed Services (service catalog) — idempotent by name.
+  // Exactly one active visit fee (consultation fee).
+  console.log("Seeding services...");
+  const services = [
+    { name: "Consultation Fee", unit_price_kobo: 5000, is_visit_fee: true, is_active: true },
+    { name: "Injection", unit_price_kobo: 2000, is_visit_fee: false, is_active: true },
+    { name: "Wound Dressing", unit_price_kobo: 3000, is_visit_fee: false, is_active: true },
+    { name: "Laboratory Test", unit_price_kobo: 4000, is_visit_fee: false, is_active: true },
+    { name: "ECG", unit_price_kobo: 6000, is_visit_fee: false, is_active: true },
+    { name: "Scan / Ultrasound", unit_price_kobo: 12000, is_visit_fee: false, is_active: true },
+    { name: "Minor Surgery", unit_price_kobo: 25000, is_visit_fee: false, is_active: true },
+    { name: "IV Fluid", unit_price_kobo: 7000, is_visit_fee: false, is_active: true },
+    { name: "X-Ray", unit_price_kobo: 8000, is_visit_fee: false, is_active: true },
+    { name: "Pharmacy Dispensing", unit_price_kobo: 3500, is_visit_fee: false, is_active: true },
+  ];
+  for (const svc of services) {
+    await supabase.from("services").upsert(
+      {
+        name: svc.name,
+        unit_price_kobo: svc.unit_price_kobo,
+        is_visit_fee: svc.is_visit_fee,
+        is_active: svc.is_active,
+      },
+      { onConflict: "name" },
+    );
+    await sleep(50);
+  }
+
+  // 3c. Seed Hospital Settings (single row) — idempotent.
+  console.log("Seeding hospital settings...");
+  await supabase.from("hospital_settings").upsert(
+    {
+      name: "Champ Hospital",
+      address: "123 Medical Street, Lagos, Nigeria",
+      phone: "0800 000 0000",
+      receipt_footer: "Thank you for visiting Champ Hospital",
+    },
+    { onConflict: "id" },
+  );
+
+  // 4. Seed Billing (idempotent)
+  // Business rule: every invoice is paid in full in a single payment.
+  // Every invoice is settled in one payment; there are no balances or deposits.
+  console.log("Seeding invoices and payments...");
+  const { data: allPatients } = await supabase.from("patients").select("id, patient_number");
+  const { data: allVisits } = await supabase
+    .from("visits")
+    .select("id, patient_id, status")
+    .eq("status", "completed");
+  const { data: allProfiles } = await supabase.from("profiles").select("id, role");
+  const owner = allProfiles?.find(p => p.role === "owner");
+  const nurse = allProfiles?.find(p => p.role === "nurse");
+
+  if (allPatients && allVisits && owner && nurse) {
+    // Pick a few completed visits to invoice.
+    const visitsToInvoice = allVisits.slice(0, 6);
+
+    for (let i = 0; i < visitsToInvoice.length; i++) {
+      const visit = visitsToInvoice[i];
+      const patient = allPatients.find(p => p.id === visit.patient_id);
+      if (!patient) continue;
+
+      const invoiceNumber = `INV-${String(i + 1).padStart(6, "0")}`;
+      const createdAt = new Date();
+      createdAt.setDate(createdAt.getDate() - (i + 1));
+
+      // Upsert invoice idempotently by invoice_number.
+      const { data: invoice, error: invError } = await supabase
+        .from("invoices")
+        .upsert(
+          {
+            invoice_number: invoiceNumber,
+            patient_id: patient.id,
+            visit_id: visit.id,
+            status: i === 5 ? "void" : i % 2 === 0 ? "unpaid" : "paid",
+            subtotal_kobo: 5000,
+            discount_kobo: i === 2 ? 1000 : 0, // a few with a discount
+            total_kobo: i === 2 ? 4000 : 5000,
+            amount_paid_kobo: i % 2 === 0 || i === 5 ? 0 : 5000,
+            paid_at: i % 2 === 1 ? createdAt.toISOString() : null,
+            paid_by: i % 2 === 1 ? nurse.id : null,
+            created_by: nurse.id,
+            created_at: createdAt.toISOString(),
+            updated_at: createdAt.toISOString(),
+            ...(i === 5
+              ? {
+                  voided_at: createdAt.toISOString(),
+                  voided_reason: "Duplicate invoice - cancelled in error.",
+                  voided_by: owner.id,
+                }
+              : {}),
+          },
+          { onConflict: "invoice_number" },
+        )
+        .select()
+        .single();
+
+      if (invError) {
+        console.error(`Error seeding invoice ${invoiceNumber}:`, invError.message);
+        continue;
+      }
+
+      // Add a single line item (idempotent: delete existing first).
+      await supabase.from("invoice_items").delete().eq("invoice_id", invoice.id);
+      await supabase.from("invoice_items").insert({
+        invoice_id: invoice.id,
+        description: "Consultation fee",
+        quantity: 1,
+        unit_price_kobo: i === 2 ? 5000 : 5000,
+        line_total_kobo: i === 2 ? 5000 : 5000,
+      });
+
+      // For paid invoices, create exactly one payment (idempotent by idempotency key).
+      if (invoice.status === "paid" && i % 2 === 1) {
+        const methods = ["cash", "transfer", "pos"];
+        const method = methods[i % methods.length];
+        await supabase.from("payments").delete().eq("invoice_id", invoice.id);
+        await supabase.from("payments").insert({
+          invoice_id: invoice.id,
+          amount_kobo: invoice.total_kobo,
+          method: method,
+          reference: `REF-${invoiceNumber}-${method}`,
+          idempotency_key: `seed-${invoiceNumber}`,
+          reversed: false,
+          created_by: nurse.id,
+          created_at: createdAt.toISOString(),
+        });
+      }
+
+      // For void invoices, ensure no payment exists.
+      if (invoice.status === "void") {
+        await supabase.from("payments").delete().eq("invoice_id", invoice.id);
+      }
+    }
+  }
+
   console.log("✅ Stage 2 Seeding completed successfully!");
 }
 

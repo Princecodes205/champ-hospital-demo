@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SessionProvider } from './app/SessionProvider';
 import { PatientsList, RegisterPatientDialog, PatientProfile } from './features/patients';
 import { QueuePage, VisitPage } from './features/visits';
+import { InvoicesList, InvoicePage, ServicesPage, HospitalSettingsPage, ReceiptPage } from './features/billing';
 import { supabase } from './lib/supabase';
 import './styles/tokens.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -98,9 +99,14 @@ export default function App() {
               />
             )}
             {currentPath === '/queue' && <QueuePage onVisitClick={(id) => { setSelectedVisit(id); setCurrentPath('/visit'); }} />}
+            {currentPath === '/invoices' && <InvoicesList />}
+            {currentPath === '/invoice/:id' && <InvoicePage />}
+            {currentPath === '/services' && (user.role === 'owner' ? <ServicesPage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
+            {currentPath === '/settings' && (user.role === 'owner' ? <HospitalSettingsPage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
+            {currentPath === '/receipt/:id' && <ReceiptPage />}
             {currentPath === '/visit' && <VisitPage visitId={selectedVisit || ''} userRole={user.role} />}
             {currentPath === '/home' && (user.role !== 'owner' ? <HomePage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
-            {!['/overview', '/staff', '/patients', '/patient-profile', '/queue', '/visit', '/home'].includes(currentPath) ? (
+            {!['/overview', '/staff', '/patients', '/patient-profile', '/queue', '/visit', '/invoices', '/invoice/:id', '/services', '/settings', '/receipt/:id', '/home'].includes(currentPath) ? (
               user.role === 'owner' ? <OverviewPage /> : <HomePage />
             ) : null}
 
