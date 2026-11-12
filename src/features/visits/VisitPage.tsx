@@ -25,7 +25,6 @@ export const VisitPage = ({
     isLoading,
     saveVitals,
     beginConsultation,
-    completeVisit,
     cancelVisit,
     isSaving,
     vitals,
@@ -277,21 +276,187 @@ export const VisitPage = ({
 
   const handleCompleteVisit = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
       const userId = user?.id;
 
-      if (!userId) {
+      if (!userId || authError) {
         throw new Error("User session not found. Please log in again.");
       }
 
-      await completeVisit({
+      // 1. Insert or update the consultation
+      const { error: consultError } = await supabase.from("consultations").upsert({
+        visit_id: visitId,
         history: consultForm.history || "",
         examination: consultForm.examination || "",
         diagnosis: consultForm.diagnosis || "",
         plan: consultForm.plan || "",
         doctor_id: userId,
-        prescriptions: prescriptionsForm,
+        updated_at: new Date().toISOString(),
       });
+      if (consultError) throw consultError;
+
+      // 2. Insert prescription items and capture their IDs (for invoice cross-reference)
+      const prescriptionItemIds: Record<string, string> = {};
+      if (prescriptionsForm.length > 0) {
+        const prescriptionRows = prescriptionsForm.map((p) => ({
+          visit_id: visitId,
+          drug_id: p.drug_id,
+          dose: p.dose || "",
+          frequency: p.frequency || "",
+          duration: p.duration || "",
+          quantity: p.quantity || 1,
+          instructions: p.instructions || "",
+        }));
+        const { data: insertedPrescriptions, error: presError } = await supabase
+          .from("prescription_items")
+          .insert(prescriptionRows)
+          .select("id, drug_id");
+        if (presError) throw presError;
+
+        insertedPrescriptions?.forEach((pi) => {
+          prescriptionItemIds[pi.drug_id] = pi.id;
+        });
+      }
+
+      // 3. Find or create the invoice for this visit
+      let invoiceId: string;
+      const { data: existingInvoice, error: invFetchError } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("visit_id", visitId)
+        .maybeSingle();
+
+      if (invFetchError) throw invFetchError;
+
+      if (existingInvoice?.id) {
+        invoiceId = existingInvoice.id;
+        // Clear existing items to avoid duplicates on retry
+        await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
+      } else {
+        // Get the active visit fee service
+        const { data: feeService } = await supabase
+          .from("services")
+          .select("unit_price_kobo")
+          .eq("is_visit_fee", true)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        const visitFee = feeService?.unit_price_kobo || 0;
+
+        // Create invoice number client-side
+        const invoiceNumber = `INV-${Math.floor(100000 + Math.random() * 900000)}`;
+
+        const { data: newInvoice, error: invError } = await supabase
+          .from("invoices")
+          .insert({
+            patient_id: (visit as any)?.patient_id,
+            visit_id: visitId,
+            invoice_number: invoiceNumber,
+            status: "unpaid",
+            subtotal_kobo: visitFee,
+            discount_kobo: 0,
+            total_kobo: visitFee,
+            amount_paid_kobo: 0,
+            created_by: userId,
+          })
+          .select("id")
+          .single();
+
+        if (invError) throw invError;
+        invoiceId = newInvoice.id;
+
+        // Add consultation fee line item
+        if (visitFee > 0) {
+          const { error: itemError } = await supabase.from("invoice_items").insert({
+            invoice_id: invoiceId,
+            description: "Consultation fee",
+            quantity: 1,
+            unit_price_kobo: visitFee,
+            line_total_kobo: visitFee,
+            source: "visit_fee",
+          });
+          if (itemError) throw itemError;
+        }
+      }
+
+      // 4. Fetch fresh visit charges from database (not local state)
+      const { data: charges } = await supabase
+        .from("visit_charges")
+        .select("*, services(name)")
+        .eq("visit_id", visitId);
+
+      if (charges && charges.length > 0) {
+        const chargeRows = charges.map((c: any) => ({
+          invoice_id: invoiceId,
+          description: c.services?.name || "Service Charge",
+          quantity: c.quantity || 1,
+          unit_price_kobo: c.unit_price_kobo || 0,
+          line_total_kobo: (c.quantity || 1) * (c.unit_price_kobo || 0),
+          source: "service",
+        }));
+        const { error: chargeError } = await supabase
+          .from("invoice_items")
+          .insert(chargeRows);
+        if (chargeError) throw chargeError;
+      }
+
+      // 5. Add prescribed drugs as invoice line items (snapshot price from drug catalog)
+      for (const p of prescriptionsForm) {
+        const { data: drug } = await supabase
+          .from("drugs")
+          .select("name, unit_price_kobo, strength")
+          .eq("id", p.drug_id)
+          .single();
+
+        if (drug) {
+          const qty = p.quantity || 1;
+          const unitPrice = (drug as any).unit_price_kobo || 0;
+          const description = `${drug.name}${drug.strength ? ` ${drug.strength}` : ""}`;
+
+          const { error: drugItemError } = await supabase.from("invoice_items").insert({
+            invoice_id: invoiceId,
+            description,
+            quantity: qty,
+            unit_price_kobo: unitPrice,
+            line_total_kobo: qty * unitPrice,
+            source: "drug",
+            prescription_item_id: prescriptionItemIds[p.drug_id] || null,
+          });
+          if (drugItemError) throw drugItemError;
+        }
+      }
+
+      // 6. Recompute invoice totals from all line items
+      const { data: allItems } = await supabase
+        .from("invoice_items")
+        .select("line_total_kobo")
+        .eq("invoice_id", invoiceId);
+
+      const subtotal = allItems?.reduce((sum, item) => sum + (item.line_total_kobo || 0), 0) || 0;
+
+      await supabase
+        .from("invoices")
+        .update({
+          subtotal_kobo: subtotal,
+          total_kobo: subtotal,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoiceId);
+
+      // 7. Mark the visit as completed
+      const { error: visitError } = await supabase
+        .from("visits")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", visitId);
+
+      if (visitError) throw visitError;
+
       addToast("Visit completed successfully!", "success");
     } catch (err: any) {
       console.error(err.message);
@@ -587,11 +752,11 @@ export const VisitPage = ({
             visit.status !== "completed" &&
             visit.status !== "cancelled" && (
               <div className="flex gap-2">
-                {consultation ? (
+                {consultation || visit.status === "in_consultation" ? (
                   <Button onClick={handleSaveConsultation} isLoading={isSaving}>
                     Save Draft
                   </Button>
-                ) : visit.status === "waiting_doctor" && (
+                ) : (
                   <Button
                     onClick={() => beginConsultation((window as any).userId)}
                     isLoading={isSaving}
@@ -701,7 +866,7 @@ export const VisitPage = ({
                     >
                       <div className="font-medium">{d.name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {d.strength} · {d.form} · {formatNaira(d.unit_price_kobo)}
+                        {d.strength} · {d.form} · {formatNaira((d as any).unit_price_naira ?? 0)}
                       </div>
                     </button>
                   ))}

@@ -51,8 +51,18 @@ export const useInvoices = (params: InvoicesListParams = {}) => {
       const { data, error, count } = await query;
       if (error) throw error;
 
+      // The live database still uses `_kobo` column names (migration 0010 has not been applied).
+      // Map them to the `_naira` field names the UI types and components expect.
+      const invoices = (data ?? []).map(inv => ({
+        ...inv,
+        subtotal_naira: (inv as any).subtotal_kobo,
+        discount_naira: (inv as any).discount_kobo,
+        total_naira: (inv as any).total_kobo,
+        amount_paid_naira: (inv as any).amount_paid_kobo,
+      })) as Invoice[];
+
       return {
-        invoices: data as Invoice[],
+        invoices,
         count: count ?? 0,
       };
     },
@@ -84,12 +94,33 @@ export const useInvoice = (invoiceId: string) => {
         .order('created_at', { ascending: true });
       if (paymentsError) throw paymentsError;
 
+      // The live database still uses `_kobo` column names (migration 0010 has not been applied).
+      // Map them to the `_naira` field names the UI types and components expect.
+      const mappedInvoice = {
+        ...invoice,
+        subtotal_naira: (invoice as any).subtotal_kobo,
+        discount_naira: (invoice as any).discount_kobo,
+        total_naira: (invoice as any).total_kobo,
+        amount_paid_naira: (invoice as any).amount_paid_kobo,
+      } as Invoice & {
+        patients: { full_name: string; patient_number: string };
+      };
+
+      const mappedItems = (items ?? []).map(item => ({
+        ...item,
+        unit_price_naira: (item as any).unit_price_kobo,
+        line_total_naira: (item as any).line_total_kobo,
+      })) as InvoiceItem[];
+
+      const mappedPayments = (payments ?? []).map(p => ({
+        ...p,
+        amount_naira: (p as any).amount_kobo,
+      })) as Payment[];
+
       return {
-        invoice: invoice as Invoice & {
-          patients: { full_name: string; patient_number: string };
-        },
-        items: items as InvoiceItem[],
-        payments: payments as Payment[],
+        invoice: mappedInvoice,
+        items: mappedItems,
+        payments: mappedPayments,
       };
     },
     enabled: !!invoiceId,

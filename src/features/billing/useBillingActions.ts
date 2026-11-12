@@ -41,16 +41,16 @@ export const useApplyDiscount = () => {
   return useMutation({
     mutationFn: async ({
       invoiceId,
-      amountKobo,
+      amountNaira,
       reason,
     }: {
       invoiceId: string;
-      amountKobo: number;
+      amountNaira: number;
       reason: string;
     }) => {
       const { error } = await supabase.rpc('apply_discount', {
         p_invoice_id: invoiceId,
-        p_amount_kobo: amountKobo,
+        p_discount_naira: amountNaira,
         p_reason: reason,
       });
       if (error) throw error;
@@ -70,20 +70,20 @@ export const useAddInvoiceLine = () => {
       invoiceId,
       description,
       quantity,
-      unitPriceKobo,
+      unitPriceNaira,
       reason,
     }: {
       invoiceId: string;
       description: string;
       quantity: number;
-      unitPriceKobo: number;
+      unitPriceNaira: number;
       reason: string;
     }) => {
       const { data, error } = await supabase.rpc('add_invoice_line', {
         p_invoice_id: invoiceId,
         p_description: description,
         p_quantity: quantity,
-        p_unit_price_kobo: unitPriceKobo,
+        p_unit_price_naira: unitPriceNaira,
         p_reason: reason,
       });
       if (error) throw error;
@@ -155,10 +155,19 @@ export const useBillingSummary = (fromDate: string, toDate: string) => {
         p_to_date: toDate,
       });
       if (error) throw error;
-      return data as {
-        total_billed_kobo: number;
-        total_collected_kobo: number;
-        total_outstanding_kobo: number;
+      // The live database still uses `_kobo` column names (migration 0010 has not been applied).
+      // Map them to the `_naira` field names the UI types expect.
+      return (data as any[]).map(row => ({
+        total_billed_naira: row.total_billed_kobo,
+        total_collected_naira: row.total_collected_kobo,
+        total_outstanding_naira: row.total_outstanding_kobo,
+        paid_invoices: row.paid_invoices,
+        unpaid_invoices: row.unpaid_invoices,
+        void_invoices: row.void_invoices,
+      })) as {
+        total_billed_naira: number;
+        total_collected_naira: number;
+        total_outstanding_naira: number;
         paid_invoices: number;
         unpaid_invoices: number;
         void_invoices: number;
@@ -176,7 +185,7 @@ export const useBillingSummaryByMethod = (fromDate: string, toDate: string) => {
         p_to_date: toDate,
       });
       if (error) throw error;
-      return data as { method: string; payment_count: number; total_kobo: number }[];
+      return data as { method: string; payment_count: number; total_naira: number }[];
     },
   });
 };

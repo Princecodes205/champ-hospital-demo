@@ -12,7 +12,11 @@ export const useServices = () => {
         .order('is_visit_fee', { ascending: false })
         .order('name', { ascending: true });
       if (error) throw error;
-      return data as Service[];
+      // The live database still uses `unit_price_kobo` (migration 0010 has not been applied).
+      return (data ?? []).map(s => ({
+        ...s,
+        unit_price_naira: (s as any).unit_price_kobo,
+      })) as Service[];
     },
   });
 };
@@ -23,7 +27,7 @@ export const useCreateService = () => {
   return useMutation({
     mutationFn: async (service: {
       name: string;
-      unit_price_kobo: number;
+      unit_price_naira: number;
       is_visit_fee: boolean;
     }) => {
       const { data, error } = await supabase
@@ -76,7 +80,11 @@ export const useVisitCharges = (visitId: string) => {
         .eq('visit_id', visitId)
         .order('created_at', { ascending: true });
       if (error) throw error;
-      return data as (VisitChargeRow & { services: { name: string } })[];
+      // The live database still uses `unit_price_kobo` (migration 0010 has not been applied).
+      return (data ?? []).map(c => ({
+        ...c,
+        unit_price_naira: (c as any).unit_price_kobo,
+      })) as (VisitChargeRow & { services: { name: string } })[];
     },
     enabled: !!visitId,
   });
@@ -114,7 +122,7 @@ interface VisitChargeRow {
   visit_id: string;
   service_id: string;
   quantity: number;
-  unit_price_kobo: number;
+  unit_price_naira: number;
   added_by: string;
   created_at: string;
 }

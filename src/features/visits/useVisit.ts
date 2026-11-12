@@ -120,7 +120,7 @@ export const useVisit = (visitId: string) => {
 
   const completeVisitMutation = useMutation({
     mutationFn: async (consultationData: any) => {
-      const { error } = await supabase.rpc('complete_visit', {
+      const { error } = await supabase.rpc('complete_visit_v2', {
         p_visit_id: visitId,
         p_history: consultationData.history,
         p_examination: consultationData.examination,

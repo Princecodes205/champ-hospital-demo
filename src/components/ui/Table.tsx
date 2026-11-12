@@ -1,4 +1,4 @@
-export const Table = ({ columns, data }: { columns: { header: string; accessor: string }[], data: any[] }) => {
+export const Table = ({ columns, data, onRowClick }: { columns: { header: string; accessor: string }[], data: any[], onRowClick?: (row: any) => void }) => {
   return (
     <div className="overflow-x-auto border rounded-lg">
       <table className="w-full text-sm text-left">
@@ -18,7 +18,11 @@ export const Table = ({ columns, data }: { columns: { header: string; accessor: 
             </tr>
           ) : (
             data.map((row, i) => (
-              <tr key={i} className="hover:bg-muted/30 transition-colors">
+              <tr
+                key={i}
+                className="hover:bg-muted/30 transition-colors cursor-pointer"
+                onClick={() => onRowClick?.(row)}
+              >
                 {columns.map((col) => (
                   <td key={col.accessor} className="px-4 py-3">
                     {row[col.accessor]}

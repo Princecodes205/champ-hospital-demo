@@ -102,13 +102,17 @@ export default function App() {
             )}
             {currentPath === '/queue' && <QueuePage onVisitClick={(id) => { setSelectedVisit(id); setCurrentPath('/visit'); }} />}
             {currentPath === '/invoices' && <InvoicesList />}
-            {currentPath === '/invoice/:id' && <InvoicePage />}
+            {currentPath.startsWith('/invoice/') && (
+              <InvoicePage invoiceId={currentPath.slice('/invoice/'.length)} />
+            )}
+            {currentPath.startsWith('/receipt/') && (
+              <ReceiptPage invoiceId={currentPath.slice('/receipt/'.length)} />
+            )}
             {currentPath === '/services' && (user.role === 'owner' ? <ServicesPage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
             {currentPath === '/settings' && (user.role === 'owner' ? <HospitalSettingsPage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
-            {currentPath === '/receipt/:id' && <ReceiptPage />}
             {currentPath === '/visit' && <VisitPage visitId={selectedVisit || ''} userRole={user.role} />}
             {currentPath === '/home' && (user.role !== 'owner' ? <HomePage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
-            {!['/overview', '/staff', '/patients', '/patient-profile', '/queue', '/visit', '/invoices', '/invoice/:id', '/services', '/settings', '/receipt/:id', '/home'].includes(currentPath) ? (
+            {!['/overview', '/staff', '/patients', '/patient-profile', '/queue', '/visit', '/invoices', '/services', '/settings', '/home'].includes(currentPath) && !currentPath.startsWith('/invoice/') && !currentPath.startsWith('/receipt/') ? (
               user.role === 'owner' ? <OverviewPage /> : <HomePage />
             ) : null}
 

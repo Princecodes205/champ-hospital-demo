@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { Button, useToast } from '../../components/ui';
 import { useInvoice } from './useInvoices';
 import { useHospitalSettings } from './useBillingActions';
@@ -38,13 +37,12 @@ const PRINT_STYLES = `
   }
 `;
 
-export const ReceiptPage = () => {
-  const { id: invoiceId } = useParams<{ id: string }>();
+export const ReceiptPage = ({ invoiceId }: { invoiceId: string }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
   const { addToast } = useToast();
 
-  const { data, isLoading } = useInvoice(invoiceId ?? '');
+  const { data, isLoading } = useInvoice(invoiceId);
   const { data: settings } = useHospitalSettings();
 
   if (isLoading) {
@@ -67,7 +65,7 @@ export const ReceiptPage = () => {
   const patients = (invoice as any).patients as
     | { full_name: string; patient_number: string }
     | undefined;
-  const balance = invoice.total_kobo - invoice.amount_paid_kobo;
+  const balance = (invoice.total_naira ?? 0) - (invoice.amount_paid_naira ?? 0);
 
   const receiptText = buildReceiptText(
     invoice,
@@ -171,8 +169,8 @@ export const ReceiptPage = () => {
                 <tr key={item.id} className="mb-1">
                   <td className="text-[10px]">{item.description}</td>
                   <td className="text-right">{item.quantity}</td>
-                  <td className="text-right">{formatNaira(item.unit_price_kobo)}</td>
-                  <td className="text-right">{formatNaira(item.line_total_kobo)}</td>
+                  <td className="text-right">{formatNaira(item.unit_price_naira ?? 0)}</td>
+                  <td className="text-right">{formatNaira(item.line_total_naira ?? 0)}</td>
                 </tr>
               ))}
             </tbody>
@@ -181,23 +179,23 @@ export const ReceiptPage = () => {
         <hr className="border-black my-2" />
         <div className="flex justify-between mb-1">
           <span className="font-bold">Subtotal:</span>
-          <span className="font-bold text-right">{formatNaira(invoice.subtotal_kobo)}</span>
+          <span className="font-bold text-right">{formatNaira(invoice.subtotal_naira ?? 0)}</span>
         </div>
-        {invoice.discount_kobo > 0 && (
+        {invoice.discount_naira > 0 && (
           <div className="flex justify-between mb-1">
             <span className="font-bold">Discount:</span>
             <span className="text-right text-status-error">
-              -{formatNaira(invoice.discount_kobo)}
+              -{formatNaira(invoice.discount_naira ?? 0)}
             </span>
           </div>
         )}
         <div className="flex justify-between mb-1 border-t pt-1">
           <span className="font-bold">Total:</span>
-          <span className="font-bold text-right">{formatNaira(invoice.total_kobo)}</span>
+          <span className="font-bold text-right">{formatNaira(invoice.total_naira ?? 0)}</span>
         </div>
         <div className="flex justify-between mb-1">
           <span>Paid:</span>
-          <span className="text-right">{formatNaira(invoice.amount_paid_kobo)}</span>
+          <span className="text-right">{formatNaira(invoice.amount_paid_naira ?? 0)}</span>
         </div>
         <div className="flex justify-between mb-1">
           <span className="font-bold">Balance:</span>
@@ -211,7 +209,7 @@ export const ReceiptPage = () => {
               <span>
                 {p.receipt_number} • {METHOD_LABEL[p.method as keyof typeof METHOD_LABEL]}
               </span>
-              <span className="text-right">{formatNaira(p.amount_kobo)}</span>
+              <span className="text-right">{formatNaira(p.amount_naira ?? 0)}</span>
             </div>
           ))}
         </div>
@@ -249,22 +247,22 @@ function buildReceiptText(
   for (const item of items) {
     const name = item.description.slice(0, 30).padEnd(30);
     lines.push(
-      `${name} ${String(item.quantity).padStart(3)} ${formatNaira(item.unit_price_kobo).padStart(9)} ${formatNaira(item.line_total_kobo)}`,
+      `${name} ${String(item.quantity).padStart(3)} ${formatNaira(item.unit_price_naira ?? 0).padStart(9)} ${formatNaira(item.line_total_naira ?? 0)}`,
     );
   }
   lines.push('-----------------------------------------------------');
-  lines.push(`Subtotal:                      ${formatNaira(invoice.subtotal_kobo)}`);
-  if (invoice.discount_kobo > 0) {
-    lines.push(`Discount:                     -${formatNaira(invoice.discount_kobo)}`);
+  lines.push(`Subtotal:                      ${formatNaira(invoice.subtotal_naira ?? 0)}`);
+  if (invoice.discount_naira > 0) {
+    lines.push(`Discount:                     -${formatNaira(invoice.discount_naira ?? 0)}`);
   }
-  lines.push(`Total:                        ${formatNaira(invoice.total_kobo)}`);
-  lines.push(`Paid:                         ${formatNaira(invoice.amount_paid_kobo)}`);
-  lines.push(`Balance:                      ${formatNaira(invoice.total_kobo - invoice.amount_paid_kobo)}`);
+  lines.push(`Total:                        ${formatNaira(invoice.total_naira ?? 0)}`);
+  lines.push(`Paid:                         ${formatNaira(invoice.amount_paid_naira ?? 0)}`);
+  lines.push(`Balance:                      ${formatNaira((invoice.total_naira ?? 0) - (invoice.amount_paid_naira ?? 0))}`);
   lines.push('');
   lines.push('Payments:');
   for (const p of payments) {
     lines.push(
-      `  ${p.receipt_number} ${METHOD_LABEL[p.method as keyof typeof METHOD_LABEL]} ${formatNaira(p.amount_kobo)}`,
+      `  ${p.receipt_number} ${METHOD_LABEL[p.method as keyof typeof METHOD_LABEL]} ${formatNaira(p.amount_naira)}`,
     );
   }
   lines.push('');

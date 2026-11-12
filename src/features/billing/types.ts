@@ -46,7 +46,7 @@ export interface Payment {
   reversed_at: string | null;
   reversed_reason: string | null;
   reversed_by: string | null;
-  received_by: string;
+  received_by: string | null;
   paid_at: string;
   created_by: string;
   created_at: string;
