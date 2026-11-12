@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button } from '../../components/ui';
+import { Button, useToast } from '../../components/ui';
 import { useInvoice } from './useInvoices';
 import { useHospitalSettings } from './useBillingActions';
 import { formatNaira } from '../../lib/formatters';
@@ -42,6 +42,7 @@ export const ReceiptPage = () => {
   const { id: invoiceId } = useParams<{ id: string }>();
   const [isPrinting, setIsPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { addToast } = useToast();
 
   const { data, isLoading } = useInvoice(invoiceId ?? '');
   const { data: settings } = useHospitalSettings();
@@ -92,7 +93,7 @@ export const ReceiptPage = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      alert('Failed to copy receipt text.');
+      addToast('Failed to copy receipt text.', 'error');
     }
   };
 

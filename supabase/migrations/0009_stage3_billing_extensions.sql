@@ -365,9 +365,11 @@ BEGIN
           invoice_id, description, quantity, unit_price_kobo,
           line_total_kobo, source, prescription_item_id
         )
+        -- description must never be NULL (NOT NULL constraint on invoice_items).
+        -- item->>'strength' may be missing from the prescription payload, so coalesce it.
         VALUES (
           v_invoice_id,
-          v_drug_name || ' ' || (item->>'strength' || ''),
+          v_drug_name || COALESCE(' ' || item->>'strength', ''),
           v_qty,
           v_unit_price,
           v_qty * v_unit_price,
@@ -659,6 +661,7 @@ RETURNS invoices AS $$
 DECLARE
   v_status invoice_status;
   v_caller_role user_role;
+  v_invoice invoices%ROWTYPE;
 BEGIN
   SELECT get_my_role() INTO v_caller_role;
   IF v_caller_role <> 'owner' THEN
@@ -685,7 +688,9 @@ BEGIN
       voided_by = auth.uid(),
       updated_at = now()
   WHERE id = p_invoice_id
-  RETURNING *;
+  RETURNING * INTO v_invoice;
+
+  RETURN v_invoice;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
@@ -710,12 +715,12 @@ RETURNS TABLE (
 BEGIN
   RETURN QUERY
   SELECT
-    COALESCE(SUM(total_kobo), 0),
-    COALESCE(SUM(amount_paid_kobo), 0),
-    COALESCE(SUM(total_kobo - amount_paid_kobo), 0),
-    COUNT(*) FILTER (WHERE status = 'paid'),
-    COUNT(*) FILTER (WHERE status = 'unpaid'),
-    COUNT(*) FILTER (WHERE status = 'void')
+    COALESCE(SUM(total_kobo), 0)::INTEGER,
+    COALESCE(SUM(amount_paid_kobo), 0)::INTEGER,
+    COALESCE(SUM(total_kobo - amount_paid_kobo), 0)::INTEGER,
+    COUNT(*) FILTER (WHERE status = 'paid')::INTEGER,
+    COUNT(*) FILTER (WHERE status = 'unpaid')::INTEGER,
+    COUNT(*) FILTER (WHERE status = 'void')::INTEGER
   FROM invoices
   WHERE created_at >= p_from_date AND created_at <= p_to_date;
 END;

@@ -127,7 +127,7 @@ export const useVisit = (visitId: string) => {
         p_diagnosis: consultationData.diagnosis,
         p_plan: consultationData.plan,
         p_doctor_id: consultationData.doctor_id,
-        p_prescriptions: consultationData.prescriptions || [],
+        p_prescriptions: JSON.stringify(consultationData.prescriptions || []),
       });
       if (error) throw error;
     },

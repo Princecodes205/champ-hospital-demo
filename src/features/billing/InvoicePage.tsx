@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Input, Table, Badge, Dialog } from '../../components/ui';
+import { Button, Input, Table, Badge, Dialog, useToast } from '../../components/ui';
 import { useInvoice } from './useInvoices';
 import {
   useRecordPayment,
@@ -11,6 +11,7 @@ import {
 } from './useBillingActions';
 import {
   formatNaira,
+  parseNaira,
   formatDateTime,
 } from '../../lib/formatters';
 import {
@@ -29,6 +30,8 @@ export const InvoicePage = () => {
   const addInvoiceLine = useAddInvoiceLine();
   const reversePayment = useReversePayment();
   const voidInvoice = useVoidInvoice();
+
+  const { addToast } = useToast();
 
   // Local form state
   const [isRecordOpen, setIsRecordOpen] = useState(false);
@@ -88,8 +91,10 @@ export const InvoicePage = () => {
       setIsRecordOpen(false);
       setPaymentReference('');
       setIdempotencyKey(crypto.randomUUID());
+      addToast(`Payment of ${formatNaira(invoice.total_kobo)} recorded successfully.`, 'success');
     } catch (err: any) {
       setRecordError(err.message || 'Failed to record payment. Please try again.');
+      addToast(err.message || 'Failed to record payment.', 'error');
     }
   };
 
@@ -105,49 +110,51 @@ export const InvoicePage = () => {
       setIsRecordOpen(false);
       setPaymentReference('');
       setIdempotencyKey(crypto.randomUUID());
+      addToast(`Payment of ${formatNaira(invoice.total_kobo)} recorded successfully.`, 'success');
     } catch (err: any) {
       setRecordError(err.message || 'Failed to record payment. Please try again.');
+      addToast(err.message || 'Failed to record payment.', 'error');
     }
   };
 
   const handleApplyDiscount = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseInt(discountAmount, 10);
-    if (isNaN(amount) || amount < 0) {
-      alert('Enter a valid discount amount.');
+    const amountKobo = parseNaira(discountAmount);
+    if (amountKobo <= 0) {
+      addToast('Enter a valid discount amount.', 'error');
       return;
     }
     if (!discountReason.trim()) {
-      alert('A reason is required.');
+      addToast('A reason is required.', 'error');
       return;
     }
     try {
       await applyDiscount.mutateAsync({
         invoiceId: invoice.id,
-        amountKobo: amount,
+        amountKobo: amountKobo,
         reason: discountReason,
       });
       setIsDiscountOpen(false);
       setDiscountAmount('');
       setDiscountReason('');
+      addToast('Discount applied successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to apply discount.');
+      addToast(err.message || 'Failed to apply discount.', 'error');
     }
   };
 
   const handleAddLine = async (e: React.FormEvent) => {
     e.preventDefault();
     const quantity = parseInt(lineQuantity, 10);
-    const unitPrice = parseInt(lineUnitPrice, 10);
+    const unitPriceKobo = parseNaira(lineUnitPrice);
     if (
       !lineDescription.trim() ||
       isNaN(quantity) ||
       quantity <= 0 ||
-      isNaN(unitPrice) ||
-      unitPrice < 0 ||
+      unitPriceKobo < 0 ||
       !lineReason.trim()
     ) {
-      alert('Enter valid line details and a reason.');
+      addToast('Enter valid line details and a reason.', 'error');
       return;
     }
     try {
@@ -155,7 +162,7 @@ export const InvoicePage = () => {
         invoiceId: invoice.id,
         description: lineDescription,
         quantity,
-        unitPriceKobo: unitPrice,
+        unitPriceKobo,
         reason: lineReason,
       });
       setIsAddLineOpen(false);
@@ -163,14 +170,15 @@ export const InvoicePage = () => {
       setLineQuantity('1');
       setLineUnitPrice('');
       setLineReason('');
+      addToast('Line item added successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to add invoice line.');
+      addToast(err.message || 'Failed to add invoice line.', 'error');
     }
   };
 
   const handleReversePayment = async () => {
     if (!reverseReason.trim()) {
-      alert('A reason is required.');
+      addToast('A reason is required.', 'error');
       return;
     }
     const payment = latestPayment;
@@ -182,14 +190,15 @@ export const InvoicePage = () => {
       });
       setIsReverseOpen(false);
       setReverseReason('');
+      addToast('Payment reversed successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to reverse payment.');
+      addToast(err.message || 'Failed to reverse payment.', 'error');
     }
   };
 
   const handleVoidInvoice = async () => {
     if (!voidReason.trim()) {
-      alert('A reason is required.');
+      addToast('A reason is required.', 'error');
       return;
     }
     try {
@@ -199,8 +208,9 @@ export const InvoicePage = () => {
       });
       setIsVoidOpen(false);
       setVoidReason('');
+      addToast('Invoice voided successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to void invoice.');
+      addToast(err.message || 'Failed to void invoice.', 'error');
     }
   };
 

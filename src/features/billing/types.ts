@@ -6,11 +6,11 @@ export interface Invoice {
   visit_id: string;
   invoice_number: string;
   status: InvoiceStatus;
-  subtotal_kobo: number;
-  discount_kobo: number;
+  subtotal_naira: number;
+  discount_naira: number;
   discount_reason: string | null;
-  total_kobo: number;
-  amount_paid_kobo: number;
+  total_naira: number;
+  amount_paid_naira: number;
   paid_at: string | null;
   paid_by: string | null;
   voided_at: string | null;
@@ -27,8 +27,8 @@ export interface InvoiceItem {
   invoice_id: string;
   description: string;
   quantity: number;
-  unit_price_kobo: number;
-  line_total_kobo: number;
+  unit_price_naira: number;
+  line_total_naira: number;
   source: 'visit_fee' | 'service' | 'drug' | 'manual';
   prescription_item_id: string | null;
   created_at: string;
@@ -38,7 +38,7 @@ export interface Payment {
   id: string;
   invoice_id: string;
   receipt_number: string | null;
-  amount_kobo: number;
+  amount_naira: number;
   method: 'cash' | 'transfer' | 'pos';
   reference: string | null;
   idempotency_key: string;
@@ -55,7 +55,7 @@ export interface Payment {
 export interface Service {
   id: string;
   name: string;
-  unit_price_kobo: number;
+  unit_price_naira: number;
   is_visit_fee: boolean;
   is_active: boolean;
   created_at: string;
@@ -68,15 +68,15 @@ export interface VisitCharge {
   service_id: string;
   service_name: string;
   quantity: number;
-  unit_price_kobo: number;
+  unit_price_naira: number;
   added_by: string;
   created_at: string;
 }
 
 export interface BillingSummary {
-  total_billed_kobo: number;
-  total_collected_kobo: number;
-  total_outstanding_kobo: number;
+  total_billed_naira: number;
+  total_collected_naira: number;
+  total_outstanding_naira: number;
   paid_invoices: number;
   unpaid_invoices: number;
   void_invoices: number;
@@ -85,7 +85,7 @@ export interface BillingSummary {
 export interface BillingSummaryByMethod {
   method: string;
   payment_count: number;
-  total_kobo: number;
+  total_naira: number;
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos';

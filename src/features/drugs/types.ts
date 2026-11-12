@@ -5,7 +5,7 @@ export const drugSchema = z.object({
   name: z.string(),
   strength: z.string(),
   form: z.string(),
-  unit_price_kobo: z.number(),
+  unit_price_naira: z.number(),
   is_active: z.boolean(),
 });
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Input, Table, Badge, Dialog } from '../../components/ui';
+import { Button, Input, Table, Badge, Dialog, useToast } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../lib/supabase';
 
@@ -9,6 +9,7 @@ export const StaffPage = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newStaff, setNewStaff] = useState({ username: '', password: '', full_name: '', role: 'doctor' });
   const [isAdding, setIsAdding] = useState(false);
+  const { addToast } = useToast();
 
   const fetchStaff = async () => {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
@@ -34,37 +35,40 @@ export const StaffPage = () => {
       await fetchStaff();
       setIsAddOpen(false);
       setNewStaff({ username: '', password: '', full_name: '', role: 'doctor' });
+      addToast('Staff member added successfully.', 'success');
     } catch (err: any) {
-      alert(err.message);
+      addToast(err.message || 'Failed to add staff.', 'error');
     } finally {
       setIsAdding(false);
     }
   };
 
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
-    if (!confirm(`Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this account?`)) return;
+    const confirmMsg = `Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this account?`;
+    if (!window.confirm(confirmMsg)) return;
     try {
       const { error } = await supabase.functions.invoke('toggle-staff-status', {
         body: { userId: id, is_active: !currentStatus },
       });
       if (error) throw error;
       await fetchStaff();
+      addToast(`Account ${currentStatus ? 'deactivated' : 'activated'} successfully.`, 'success');
     } catch (err: any) {
-      alert(err.message);
+      addToast(err.message || 'Failed to update account status.', 'error');
     }
   };
 
   const handleResetPassword = async (id: string) => {
-    const newPassword = prompt('Enter new password:');
+    const newPassword = window.prompt('Enter new password:');
     if (!newPassword) return;
     try {
       const { error } = await supabase.functions.invoke('reset-staff-password', {
         body: { userId: id, password: newPassword },
       });
       if (error) throw error;
-      alert('Password reset successfully');
+      addToast('Password reset successfully.', 'success');
     } catch (err: any) {
-      alert(err.message);
+      addToast(err.message || 'Failed to reset password.', 'error');
     }
   };
 

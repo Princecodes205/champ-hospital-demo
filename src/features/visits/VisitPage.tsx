@@ -6,6 +6,7 @@ import {
   Badge,
   Skeleton,
   Dialog,
+  useToast,
 } from "../../components/ui";
 import { useVisit } from "./useVisit";
 import type { Drug, PrescriptionItem } from "../drugs/types";
@@ -31,6 +32,8 @@ export const VisitPage = ({
     consultation,
     prescriptions,
   } = useVisit(visitId);
+
+  const { addToast } = useToast();
 
   // Local state for forms
   const [vitalsForm, setVitalsForm] = useState({
@@ -70,10 +73,14 @@ export const VisitPage = ({
   // Load drug catalog for search
   useEffect(() => {
     const loadDrugs = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("drugs")
         .select("*")
         .eq("is_active", true);
+      if (error) {
+        addToast(`Failed to load drug catalog: ${error.message}`, "error");
+        return;
+      }
       if (data) {
         const drugs = data as Drug[];
         setAllDrugs(drugs);
@@ -81,7 +88,7 @@ export const VisitPage = ({
       }
     };
     loadDrugs();
-  }, []);
+  }, [addToast]);
 
   // Load existing data into forms when visit data changes
   useEffect(() => {
@@ -105,7 +112,7 @@ export const VisitPage = ({
         plan: consultation.plan || "",
       });
     }
-    if (prescriptions) {
+    if (prescriptions && prescriptionsForm.length === 0) {
       setPrescriptionsForm(
         prescriptions.map((p) => ({
           drug_id: p.drug_id,
@@ -133,10 +140,17 @@ export const VisitPage = ({
           .select("*, services(name)")
           .eq("visit_id", visitId)
           .order("created_at", { ascending: true });
-        if (charges) setVisitCharges(charges as any[]);
+        if (charges) {
+          setVisitCharges(
+            charges.map((c: any) => ({
+              ...c,
+              service_name: c.services?.name || c.service_name || "Unknown Service",
+            }))
+          );
+        }
       })();
     }
-  }, [vitals, consultation, prescriptions, visit]);
+  }, [vitals, consultation, prescriptions, visit, visitId, prescriptionsForm.length]);
 
   const handleAddCharge = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,42 +159,119 @@ export const VisitPage = ({
     const quantity = parseInt(chargeQuantity, 10);
     if (!serviceId) {
       setChargeError("Select a service.");
+      addToast("Select a service.", "error");
       return;
     }
     if (isNaN(quantity) || quantity <= 0) {
       setChargeError("Enter a valid quantity.");
+      addToast("Enter a valid quantity.", "error");
       return;
     }
     try {
-      await supabase.rpc("add_visit_charge", {
+      const { data: newCharge, error: rpcError } = await supabase.rpc("add_visit_charge", {
         p_visit_id: visitId,
         p_service_id: serviceId,
         p_quantity: quantity,
       });
+
+      if (rpcError) {
+        setChargeError(rpcError.message || "Failed to add charge.");
+        addToast(rpcError.message || "Failed to add charge.", "error");
+        return;
+      }
+
       setChargeServiceId("");
       setChargeQuantity("1");
-      const { data: charges } = await supabase
+
+      // Optimistically add to local state so it appears immediately
+      const service = allServices.find((s: any) => s.id === serviceId);
+      const unitPrice = service?.unit_price_kobo || 0;
+      const optimisticCharge = {
+        id: newCharge?.id || `temp-${Date.now()}`,
+        visit_id: visitId,
+        service_id: serviceId,
+        service_name: service?.name || "Unknown Service",
+        quantity: quantity,
+        unit_price_kobo: unitPrice,
+        line_total_kobo: unitPrice * quantity,
+        added_by: (window as any).userId,
+        created_at: new Date().toISOString(),
+      };
+      setVisitCharges((prev: any[]) => [...prev, optimisticCharge]);
+
+      // Refetch to sync with the server
+      const { data: charges, error: refetchError } = await supabase
         .from("visit_charges")
         .select("*, services(name)")
         .eq("visit_id", visitId)
         .order("created_at", { ascending: true });
-      if (charges) setVisitCharges(charges as any[]);
+
+      if (refetchError) {
+        addToast("Charge added, but failed to refresh the list. Please reload.", "error");
+        return;
+      }
+
+      if (charges) {
+        setVisitCharges(
+          charges.map((c: any) => ({
+            ...c,
+            service_name: c.services?.name || c.service_name || "Unknown Service",
+          }))
+        );
+      }
+      addToast("Charge added successfully.", "success");
     } catch (err: any) {
       setChargeError(err.message || "Failed to add charge.");
+      addToast(err.message || "Failed to add charge.", "error");
     }
   };
 
   const handleRemoveCharge = async (id: string) => {
+    // Save previous state in case we need to revert
+    const previousCharges = visitCharges;
+
+    // Optimistically remove immediately
+    setVisitCharges((prev: any[]) => prev.filter((c) => c.id !== id));
+
     try {
-      await supabase.from("visit_charges").delete().eq("id", id);
-      const { data: charges } = await supabase
+      const { error: deleteError } = await supabase
+        .from("visit_charges")
+        .delete()
+        .eq("id", id);
+
+      if (deleteError) {
+        // Revert optimistic removal on server error
+        setVisitCharges(previousCharges);
+        addToast(deleteError.message || "Failed to remove charge from server.", "error");
+        return;
+      }
+
+      addToast("Charge removed.", "success");
+
+      // Refetch to sync with server
+      const { data: charges, error: refetchError } = await supabase
         .from("visit_charges")
         .select("*, services(name)")
         .eq("visit_id", visitId)
         .order("created_at", { ascending: true });
-      if (charges) setVisitCharges(charges as any[]);
+
+      if (refetchError) {
+        addToast("Charge removed, but failed to sync with server. Please reload.", "error");
+        return;
+      }
+
+      if (charges) {
+        setVisitCharges(
+          charges.map((c: any) => ({
+            ...c,
+            service_name: c.services?.name || c.service_name || "Unknown Service",
+          }))
+        );
+      }
     } catch (err: any) {
-      alert(err.message || "Failed to remove charge.");
+      // Revert optimistic removal on exception
+      setVisitCharges(previousCharges);
+      addToast(err.message || "Failed to remove charge.", "error");
     }
   };
 
@@ -201,10 +292,10 @@ export const VisitPage = ({
         doctor_id: userId,
         prescriptions: prescriptionsForm,
       });
-      alert("Visit completed successfully!");
+      addToast("Visit completed successfully!", "success");
     } catch (err: any) {
       console.error(err.message);
-      alert(`Error completing visit: ${err.message}`);
+      addToast(`Error completing visit: ${err.message}`, "error");
     }
   };
 
@@ -283,10 +374,10 @@ export const VisitPage = ({
       });
 
       if (error) throw error;
-      alert("Consultation saved successfully!");
+      addToast("Consultation saved successfully!", "success");
     } catch (err: any) {
       console.error(err.message);
-      alert(`Error saving consultation: ${err.message}`);
+      addToast(`Error saving consultation: ${err.message}`, "error");
     }
   };
 
@@ -496,10 +587,11 @@ export const VisitPage = ({
             visit.status !== "completed" &&
             visit.status !== "cancelled" && (
               <div className="flex gap-2">
-                <Button onClick={handleSaveConsultation} isLoading={isSaving}>
-                  Save Draft
-                </Button>
-                {visit.status === "waiting_doctor" && (
+                {consultation ? (
+                  <Button onClick={handleSaveConsultation} isLoading={isSaving}>
+                    Save Draft
+                  </Button>
+                ) : visit.status === "waiting_doctor" && (
                   <Button
                     onClick={() => beginConsultation((window as any).userId)}
                     isLoading={isSaving}
@@ -564,86 +656,188 @@ export const VisitPage = ({
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Prescriptions</h2>
-          {visit.status !== "completed" && visit.status !== "cancelled" && (
-            <Button onClick={handleCompleteVisit} isLoading={isSaving}>
-              Complete Visit
-            </Button>
-          )}
         </div>
         <div
           className={`p-4 border rounded-card bg-card space-y-4 ${visit.status === "completed" || visit.status === "cancelled" ? "opacity-70 pointer-events-none" : ""}`}
         >
-          <div className="flex gap-2">
-            <Input
-              placeholder="Search drug catalog..."
-              className="flex-1"
-              value={drugSearch}
-              onChange={(e) => {
-                const val = e.target.value;
-                setDrugSearch(val);
-                const filtered =
-                  allDrugs.filter((d: any) =>
-                    d.name.toLowerCase().includes(val.toLowerCase()),
-                  ) || [];
-                setFilteredDrugs(filtered);
+          <div className="space-y-2">
+            <div className="relative w-full max-w-md">
+              <Input
+                placeholder="Search drug catalog..."
+                className="w-full"
+                value={drugSearch}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDrugSearch(val);
+                  const filtered =
+                    allDrugs.filter((d: any) =>
+                      d.name.toLowerCase().includes(val.toLowerCase()),
+                    ) || [];
+                  setFilteredDrugs(filtered);
+                }}
+              />
+              {drugSearch.trim() !== "" && filteredDrugs.length > 0 && (
+                <div className="absolute z-20 w-full bg-background border border-input rounded-control shadow-lg mt-1 max-h-48 overflow-y-auto">
+                  {filteredDrugs.slice(0, 8).map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => {
+                        setPrescriptionsForm([
+                          ...prescriptionsForm,
+                          {
+                            drug_id: d.id,
+                            dose: "",
+                            frequency: "",
+                            duration: "",
+                            quantity: 1,
+                            instructions: "",
+                          },
+                        ]);
+                        setDrugSearch("");
+                        setFilteredDrugs(allDrugs);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted hover:text-primary transition-colors border-b last:border-0"
+                    >
+                      <div className="font-medium">{d.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {d.strength} · {d.form} · {formatNaira(d.unit_price_kobo)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Button
+              onClick={() => {
+                const drug =
+                  filteredDrugs.find(
+                    (d) => d.name.toLowerCase() === drugSearch.toLowerCase(),
+                  ) || filteredDrugs[0];
+                if (!drug) return;
+                setPrescriptionsForm([
+                  ...prescriptionsForm,
+                  {
+                    drug_id: drug.id,
+                    dose: "",
+                    frequency: "",
+                    duration: "",
+                    quantity: 1,
+                    instructions: "",
+                  },
+                ]);
+                setDrugSearch("");
+                setFilteredDrugs(allDrugs);
               }}
-            />
-            <select
-              className="px-3 py-2 rounded-control border bg-background text-foreground"
-              onChange={(e) => {
-                const drug = filteredDrugs.find((d) => d.id === e.target.value);
-                if (drug) {
-                  setPrescriptionsForm([
-                    ...prescriptionsForm,
-                    {
-                      drug_id: drug.id,
-                      dose: "",
-                      frequency: "",
-                      duration: "",
-                      quantity: 1,
-                      instructions: "",
-                    },
-                  ]);
-                }
-              }}
+              className="w-full md:w-auto"
+              disabled={filteredDrugs.length === 0 || drugSearch.trim() === ""}
             >
-              <option value="">Select Drug</option>
-              {filteredDrugs.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.strength})
-                </option>
-              ))}
-            </select>
+              Add Selected Drug
+            </Button>
           </div>
 
-          <Table
-            columns={[
-              { header: "Drug", accessor: "drug_name" },
-              { header: "Dose", accessor: "dose" },
-              { header: "Freq", accessor: "frequency" },
-              { header: "Dur", accessor: "duration" },
-              { header: "Qty", accessor: "quantity" },
-              { header: "Action", accessor: "remove" },
-            ]}
-            data={prescriptionsForm.map((item, idx) => ({
-              ...item,
-              drug_name:
-                filteredDrugs.find((d) => d.id === item.drug_id)?.name ||
-                "Unknown",
-              remove: (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    setPrescriptionsForm(
-                      prescriptionsForm.filter((_, i) => i !== idx),
-                    )
-                  }
-                >
-                  ✕
-                </Button>
-              ),
-            }))}
-          />
+          <div className="space-y-3">
+            {prescriptionsForm.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                No drugs prescribed yet. Search and add one above.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {prescriptionsForm.map((item, idx) => {
+                  const drug = allDrugs.find((d) => d.id === item.drug_id);
+                  return (
+                    <div
+                      key={item.drug_id || idx}
+                      className="p-3 border rounded-control bg-background flex flex-col md:flex-row md:items-center gap-3"
+                    >
+                      <div className="w-full md:w-48 flex flex-col gap-1">
+                        <span className="text-sm font-medium text-foreground">
+                          {drug?.name || "Unknown"}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {drug?.strength || ""} · {drug?.form || ""}
+                        </span>
+                      </div>
+                      <div className="flex flex-col md:flex-row md:gap-3 gap-2 w-full md:w-auto min-w-[120px]">
+                        <Input
+                          label="Dose"
+                          className="w-full"
+                          value={item.dose}
+                          onChange={(e) =>
+                            setPrescriptionsForm(
+                              prescriptionsForm.map((p, i) =>
+                                i === idx ? { ...p, dose: e.target.value } : p,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          label="Frequency"
+                          className="w-full"
+                          value={item.frequency}
+                          onChange={(e) =>
+                            setPrescriptionsForm(
+                              prescriptionsForm.map((p, i) =>
+                                i === idx
+                                  ? { ...p, frequency: e.target.value }
+                                  : p,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          label="Duration"
+                          className="w-full"
+                          value={item.duration}
+                          onChange={(e) =>
+                            setPrescriptionsForm(
+                              prescriptionsForm.map((p, i) =>
+                                i === idx
+                                  ? { ...p, duration: e.target.value }
+                                  : p,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          label="Qty"
+                          type="number"
+                          className="w-full"
+                          value={String(item.quantity)}
+                          onChange={(e) =>
+                            setPrescriptionsForm(
+                              prescriptionsForm.map((p, i) =>
+                                i === idx
+                                  ? {
+                                      ...p,
+                                      quantity: parseInt(e.target.value) || 1,
+                                    }
+                                  : p,
+                              ),
+                            )
+                          }
+                        />
+                        <div className="md:flex-none flex items-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive"
+                            onClick={() =>
+                              setPrescriptionsForm(
+                                prescriptionsForm.filter((_, i) => i !== idx),
+                              )
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
@@ -692,6 +886,19 @@ export const VisitPage = ({
           )}
         </div>
       </section>
+
+      {/* Complete Visit — final action at the very bottom of the page */}
+      {visit.status !== "completed" && visit.status !== "cancelled" && (
+        <div className="flex justify-end pt-6">
+          <Button
+            onClick={handleCompleteVisit}
+            isLoading={isSaving}
+            className="w-full md:w-auto"
+          >
+            Complete Visit
+          </Button>
+        </div>
+      )}
 
       {/* Add Charge Dialog */}
       <Dialog

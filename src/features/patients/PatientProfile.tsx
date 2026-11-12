@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Button, Badge, Table, Skeleton, EmptyState } from '../../components/ui';
+import { Button, Badge, Table, Skeleton, EmptyState, useToast } from '../../components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import type { Patient } from './types';
 
 export const PatientProfile = ({ patientId, onStartVisit }: { patientId: string, onStartVisit: (id: string) => void }) => {
   const [isStarting, setIsStarting] = useState(false);
+  const { addToast } = useToast();
   const { data: patient, isLoading, error } = useQuery({
     queryKey: ['patient', patientId],
     queryFn: async () => {
@@ -37,7 +38,7 @@ export const PatientProfile = ({ patientId, onStartVisit }: { patientId: string,
       onStartVisit(visitId);
     } catch (err: any) {
       console.error('Error starting visit:', err);
-      alert(err.message || 'Failed to start visit. Please try again.');
+      addToast(err.message || 'Failed to start visit.', 'error');
     } finally {
       setIsStarting(false);
     }

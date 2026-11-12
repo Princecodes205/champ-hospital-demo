@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import { Button, Input, Table, Badge, Dialog } from '../../components/ui';
+import { Button, Input, Table, Badge, Dialog, useToast } from '../../components/ui';
 import {
   useServices,
   useCreateService,
   useUpdateService,
 } from './useServices';
-import { formatNaira } from '../../lib/formatters';
+import { formatNaira, parseNaira } from '../../lib/formatters';
 import type { Service } from './types';
 
 export const ServicesPage = () => {
   const { data: services, isLoading } = useServices();
   const createService = useCreateService();
   const updateService = useUpdateService();
+  const { addToast } = useToast();
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -27,31 +28,32 @@ export const ServicesPage = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const price = parseInt(newPrice, 10);
-    if (!newName.trim() || isNaN(price) || price < 0) {
-      alert('Enter a valid name and price.');
+    const unitPriceNaira = parseNaira(newPrice);
+    if (!newName.trim() || unitPriceNaira < 0) {
+      addToast('Enter a valid name and price.', 'error');
       return;
     }
     try {
       await createService.mutateAsync({
         name: newName.trim(),
-        unit_price_kobo: price,
+        unit_price_naira: unitPriceNaira,
         is_visit_fee: newIsVisitFee,
       });
       setIsAddOpen(false);
       setNewName('');
       setNewPrice('');
       setNewIsVisitFee(false);
+      addToast('Service created successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to create service.');
+      addToast(err.message || 'Failed to create service.', 'error');
     }
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const price = parseInt(editPrice, 10);
-    if (!editingId || !editName.trim() || isNaN(price) || price < 0) {
-      alert('Enter a valid name and price.');
+    const unitPriceNaira = parseNaira(editPrice);
+    if (!editingId || !editName.trim() || unitPriceNaira < 0) {
+      addToast('Enter a valid name and price.', 'error');
       return;
     }
     try {
@@ -59,21 +61,22 @@ export const ServicesPage = () => {
         id: editingId,
         updates: {
           name: editName.trim(),
-          unit_price_kobo: price,
+          unit_price_naira: unitPriceNaira,
           is_active: editIsActive,
         },
       });
       setIsEditOpen(false);
       setEditingId(null);
+      addToast('Service updated successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to update service.');
+      addToast(err.message || 'Failed to update service.', 'error');
     }
   };
 
   const handleEdit = (service: Service) => {
     setEditingId(service.id);
     setEditName(service.name);
-    setEditPrice(service.unit_price_kobo.toString());
+    setEditPrice(service.unit_price_naira.toString());
     setEditIsActive(service.is_active);
     setIsEditOpen(true);
   };
@@ -119,7 +122,7 @@ export const ServicesPage = () => {
           data={list.map((s) => ({
             ...s,
             type: s.is_visit_fee ? 'Visit fee' : 'Service',
-            price: formatNaira(s.unit_price_kobo),
+            price: formatNaira(s.unit_price_naira),
             status: <Badge variant={s.is_active ? 'success' : 'error'}>
               {s.is_active ? 'Active' : 'Inactive'}
             </Badge>,

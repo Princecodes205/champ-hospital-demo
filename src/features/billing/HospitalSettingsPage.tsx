@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Input } from '../../components/ui';
+import { Button, Input, useToast } from '../../components/ui';
 import {
   useHospitalSettings,
   useUpdateHospitalSettings,
@@ -8,6 +8,7 @@ import {
 export const HospitalSettingsPage = () => {
   const { data, isLoading } = useHospitalSettings();
   const updateSettings = useUpdateHospitalSettings();
+  const { addToast } = useToast();
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -50,9 +51,9 @@ export const HospitalSettingsPage = () => {
           receipt_footer: footer.trim() || null,
         },
       });
-      alert('Hospital settings saved.');
+      addToast('Hospital settings saved.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to save settings.');
+      addToast(err.message || 'Failed to save settings.', 'error');
     }
   };
 

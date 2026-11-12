@@ -9,6 +9,7 @@ import { PatientsList, RegisterPatientDialog, PatientProfile } from './features/
 import { QueuePage, VisitPage } from './features/visits';
 import { InvoicesList, InvoicePage, ServicesPage, HospitalSettingsPage, ReceiptPage } from './features/billing';
 import { supabase } from './lib/supabase';
+import { ToastProvider } from './components/ui/Feedback';
 import './styles/tokens.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -81,9 +82,10 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider queryClient={queryClient}>
-        <ErrorBoundary>
-          <AppShell user={user} onSignOut={handleSignOut}>
+      <ToastProvider>
+        <SessionProvider queryClient={queryClient}>
+          <ErrorBoundary>
+            <AppShell user={user} onSignOut={handleSignOut}>
             {currentPath === '/overview' && <OverviewPage />}
             {currentPath === '/staff' && (user.role === 'owner' ? <StaffPage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
             {currentPath === '/patients' && (
@@ -120,6 +122,7 @@ export default function App() {
           </AppShell>
         </ErrorBoundary>
       </SessionProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
