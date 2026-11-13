@@ -9,6 +9,8 @@ export const StaffPage = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newStaff, setNewStaff] = useState({ username: '', password: '', full_name: '', role: 'doctor' });
   const [isAdding, setIsAdding] = useState(false);
+  const [resettingPwdId, setResettingPwdId] = useState<string | null>(null);
+  const [togglingStatusId, setTogglingStatusId] = useState<string | null>(null);
   const { addToast } = useToast();
 
   const fetchStaff = async () => {
@@ -44,8 +46,12 @@ export const StaffPage = () => {
   };
 
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+    setTogglingStatusId(id);
     const confirmMsg = `Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this account?`;
-    if (!window.confirm(confirmMsg)) return;
+    if (!window.confirm(confirmMsg)) {
+      setTogglingStatusId(null);
+      return;
+    }
     try {
       const { error } = await supabase.functions.invoke('toggle-staff-status', {
         body: { userId: id, is_active: !currentStatus },
@@ -55,12 +61,18 @@ export const StaffPage = () => {
       addToast(`Account ${currentStatus ? 'deactivated' : 'activated'} successfully.`, 'success');
     } catch (err: any) {
       addToast(err.message || 'Failed to update account status.', 'error');
+    } finally {
+      setTogglingStatusId(null);
     }
   };
 
   const handleResetPassword = async (id: string) => {
+    setResettingPwdId(id);
     const newPassword = window.prompt('Enter new password:');
-    if (!newPassword) return;
+    if (!newPassword) {
+      setResettingPwdId(null);
+      return;
+    }
     try {
       const { error } = await supabase.functions.invoke('reset-staff-password', {
         body: { userId: id, password: newPassword },
@@ -69,6 +81,8 @@ export const StaffPage = () => {
       addToast('Password reset successfully.', 'success');
     } catch (err: any) {
       addToast(err.message || 'Failed to reset password.', 'error');
+    } finally {
+      setResettingPwdId(null);
     }
   };
 
@@ -87,7 +101,7 @@ export const StaffPage = () => {
       status: <Badge variant={s.is_active ? 'success' : 'error'}>{s.is_active ? 'Active' : 'Inactive'}</Badge>,
       actions: (
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => s.id && handleResetPassword(s.id)} className="text-xs py-1 px-2">
+          <Button variant="ghost" size="sm" onClick={() => s.id && handleResetPassword(s.id)} className="text-xs py-1 px-2" isLoading={resettingPwdId === s.id} disabled={!s.id || resettingPwdId === s.id}>
             Reset Pwd
           </Button>
           <Button
@@ -95,6 +109,8 @@ export const StaffPage = () => {
             size="sm"
             onClick={() => s.id && handleToggleStatus(s.id, s.is_active)}
             className="text-xs py-1 px-2"
+            isLoading={togglingStatusId === s.id}
+            disabled={!s.id || togglingStatusId === s.id}
           >
             {s.is_active ? 'Deactivate' : 'Activate'}
           </Button>

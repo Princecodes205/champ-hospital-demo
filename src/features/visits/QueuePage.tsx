@@ -8,7 +8,7 @@ export const QueuePage = ({ onVisitClick }: { onVisitClick: (id: string) => void
   const [customDate, setCustomDate] = useState('');
 
   const role = (window as any).userRole || 'nurse';
-  const { visits, isLoading, isPolling } = useVisitQueue();
+  const { visits, isLoading } = useVisitQueue();
 
   const columns = [
     { header: 'Patient', accessor: 'patient' },
@@ -141,11 +141,6 @@ export const QueuePage = ({ onVisitClick }: { onVisitClick: (id: string) => void
             />
           )}
 
-          {isPolling && (
-            <Badge variant="warning" className="animate-pulse">
-              Polling Mode
-            </Badge>
-          )}
         </div>
       </div>
 

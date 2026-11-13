@@ -409,6 +409,7 @@ export const InvoicesList = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsNewInvoiceOpen(false)}
+              isLoading={newInvoiceLoading}
               disabled={newInvoiceLoading}
             >
               Cancel

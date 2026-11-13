@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { useRealtimeResource } from '../../lib/useRealtimeResource';
 import type { Invoice, InvoiceItem, Payment } from './types';
 
 export interface InvoicesListParams {
@@ -70,6 +71,26 @@ export const useInvoices = (params: InvoicesListParams = {}) => {
 };
 
 export const useInvoice = (invoiceId: string) => {
+  // ── Real-time: per-row subscriptions so this invoice page updates live ──
+  // Each subscribes to exactly one row (id=eq.<id>), so a change only
+  // invalidates this invoice's queries — never the whole table.
+  // These run before the return so they are always registered (rules of hooks).
+  useRealtimeResource('invoices', invoiceId, [['invoice', invoiceId]], true);
+  useRealtimeResource(
+    'invoice_items',
+    invoiceId,
+    [['invoice', invoiceId]],
+    true,
+    'invoice_id',
+  );
+  useRealtimeResource(
+    'payments',
+    invoiceId,
+    [['invoice', invoiceId]],
+    true,
+    'invoice_id',
+  );
+
   return useQuery({
     queryKey: ['invoice', invoiceId],
     queryFn: async () => {

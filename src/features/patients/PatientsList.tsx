@@ -24,10 +24,10 @@ export const PatientsList = ({ onRegisterClick, onPatientClick }: { onRegisterCl
       return data as Patient[];
     },
     placeholderData: (previousData) => previousData,
-    staleTime: 1000 * 60 * 60, // Cache for 1 hour
-    gcTime: 1000 * 60 * 60 * 24, // Keep in memory for 24h
-    refetchOnWindowFocus: false, // STOP searching for data when switching tabs
-    refetchOnMount: false, // STOP searching for data when entering the page
+    staleTime: 0, // Always refetch on invalidation — real-time drives freshness
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const columns = [

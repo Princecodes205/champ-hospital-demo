@@ -32,7 +32,11 @@ export const useCreateService = () => {
     }) => {
       const { data, error } = await supabase
         .from('services')
-        .insert(service)
+        .insert({
+          name: service.name,
+          unit_price_kobo: service.unit_price_naira,
+          is_visit_fee: service.is_visit_fee,
+        })
         .select()
         .single();
       if (error) throw error;
@@ -57,7 +61,13 @@ export const useUpdateService = () => {
     }) => {
       const { data, error } = await supabase
         .from('services')
-        .update(updates)
+        .update({
+          ...updates,
+          ...(updates.unit_price_naira !== undefined
+            ? { unit_price_kobo: updates.unit_price_naira }
+            : {}),
+          unit_price_naira: undefined,
+        })
         .eq('id', id)
         .select()
         .single();

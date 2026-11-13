@@ -44,8 +44,18 @@ export const LoginPage = ({ onAuthSuccess }: { onAuthSuccess: (user: any) => voi
       } else {
         onAuthSuccess(profile);
       }
-    } catch (_err) {
-      setError('Incorrect username or password.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isNetworkError =
+        !navigator.onLine ||
+        /failed to fetch/i.test(message) ||
+        (err as { name?: string })?.name === 'FetchError';
+
+      setError(
+        isNetworkError
+          ? 'Network error. Please check your internet connection and try again.'
+          : 'Incorrect username or password.',
+      );
     } finally {
       setIsLoading(false);
     }

@@ -10,6 +10,7 @@ import { QueuePage, VisitPage } from './features/visits';
 import { InvoicesList, InvoicePage, ServicesPage, HospitalSettingsPage, ReceiptPage } from './features/billing';
 import { supabase } from './lib/supabase';
 import { ToastProvider } from './components/ui/Feedback';
+import { RealtimeProvider } from './lib/realtime.tsx';
 import './styles/tokens.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -63,7 +64,10 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
   const handleSignOut = async () => {
+    setIsSigningOut(true);
     await supabase.auth.signOut();
     window.location.href = '/';
   };
@@ -85,7 +89,8 @@ export default function App() {
       <ToastProvider>
         <SessionProvider queryClient={queryClient}>
           <ErrorBoundary>
-            <AppShell user={user} onSignOut={handleSignOut}>
+            <RealtimeProvider queryClient={queryClient}>
+              <AppShell user={user} onSignOut={handleSignOut} isSigningOut={isSigningOut}>
             {currentPath === '/overview' && <OverviewPage />}
             {currentPath === '/staff' && (user.role === 'owner' ? <StaffPage /> : <div className="p-4 text-red-500">Unauthorized</div>)}
             {currentPath === '/patients' && (
@@ -124,9 +129,10 @@ export default function App() {
               />
             )}
           </AppShell>
+          </RealtimeProvider>
         </ErrorBoundary>
       </SessionProvider>
-      </ToastProvider>
-    </QueryClientProvider>
+    </ToastProvider>
+  </QueryClientProvider>
   );
 }

@@ -28,7 +28,7 @@ const NavItem = ({ label, icon: _Icon, href, active, onClick }: NavItemProps) =>
   </a>
 );
 
-export const AppShell = ({ children, user, onSignOut }: { children: React.ReactNode, user: any, onSignOut: () => void }) => {
+export const AppShell = ({ children, user, onSignOut, isSigningOut }: { children: React.ReactNode, user: any, onSignOut: () => void, isSigningOut?: boolean }) => {
   const currentPath = window.location.pathname;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -71,7 +71,7 @@ export const AppShell = ({ children, user, onSignOut }: { children: React.ReactN
               <span className="text-xs text-muted-foreground capitalize">{user.role}</span>
             </div>
           </div>
-          <Button variant="ghost" className="w-full justify-start gap-3 text-sm" onClick={onSignOut}>
+          <Button variant="ghost" className="w-full justify-start gap-3 text-sm" onClick={onSignOut} isLoading={isSigningOut} disabled={isSigningOut}>
             <div className="w-4 h-4 bg-foreground/20 rounded-sm" />
             Sign Out
           </Button>

@@ -447,6 +447,15 @@ export const InvoicePage = ({ invoiceId }: { invoiceId: string }) => {
                 Reversed payments are kept on record and never deleted.
               </div>
             )}
+            <Button
+              onClick={() => {
+                window.history.pushState({}, '', `/receipt/${invoice.id}`);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="mt-4 w-full"
+            >
+              Print Receipt
+            </Button>
           </section>
 
           {invoice.status !== 'void' && isStaff && (
@@ -534,6 +543,7 @@ export const InvoicePage = ({ invoiceId }: { invoiceId: string }) => {
                 type="button"
                 variant="secondary"
                 onClick={handleRetryPayment}
+                isLoading={recordPayment.isPending}
                 disabled={recordPayment.isPending}
               >
                 Retry

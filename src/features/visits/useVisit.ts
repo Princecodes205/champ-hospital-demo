@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { useRealtimeResource } from '../../lib/useRealtimeResource';
 import type { Visit } from './types';
 
 export const useVisit = (visitId: string) => {
@@ -58,6 +59,19 @@ export const useVisit = (visitId: string) => {
     },
     enabled: !!visit,
   });
+
+  // ── Real-time: per-row subscriptions for this visit ──
+  // Each subscribes to exactly one row (id=eq.<id>), so a change only
+  // invalidates the queries that care about this visit — never the whole table.
+  useRealtimeResource('visits', visitId, [['visit', visitId]], true);
+  useRealtimeResource('vitals', visitId, [['visit-vitals', visitId]], true);
+  useRealtimeResource('consultations', visitId, [
+    ['visit-consultation', visitId],
+  ]);
+  useRealtimeResource('prescription_items', visitId, [
+    ['visit-prescriptions', visitId],
+  ]);
+  useRealtimeResource('visit_charges', visitId, [['visit-charges', visitId]], true, 'visit_id');
 
   const saveVitalsMutation = useMutation({
     mutationFn: async (vitalsData: any) => {

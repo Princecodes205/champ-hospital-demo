@@ -9,6 +9,7 @@ import {
   useToast,
 } from "../../components/ui";
 import { useVisit } from "./useVisit";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Drug, PrescriptionItem } from "../drugs/types";
 import { supabase } from "../../lib/supabase";
 import { formatNaira } from "../../lib/formatters";
@@ -30,8 +31,10 @@ export const VisitPage = ({
     vitals,
     consultation,
     prescriptions,
+    completeVisit,
   } = useVisit(visitId);
 
+  const queryClient = useQueryClient();
   const { addToast } = useToast();
 
   // Local state for forms
@@ -60,12 +63,14 @@ export const VisitPage = ({
   const [filteredDrugs, setFilteredDrugs] = useState<Drug[]>([]);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [removingChargeId, setRemovingChargeId] = useState<string | null>(null);
   const [isAddChargeOpen, setIsAddChargeOpen] = useState(false);
 
   // Charges (Stage 3)
   const [chargeServiceId, setChargeServiceId] = useState("");
   const [chargeQuantity, setChargeQuantity] = useState("1");
   const [chargeError, setChargeError] = useState("");
+  const [addingCharge, setAddingCharge] = useState(false);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [visitCharges, setVisitCharges] = useState<any[]>([]);
 
@@ -154,16 +159,19 @@ export const VisitPage = ({
   const handleAddCharge = async (e: React.FormEvent) => {
     e.preventDefault();
     setChargeError("");
+    setAddingCharge(true);
     const serviceId = chargeServiceId;
     const quantity = parseInt(chargeQuantity, 10);
     if (!serviceId) {
       setChargeError("Select a service.");
       addToast("Select a service.", "error");
+      setAddingCharge(false);
       return;
     }
     if (isNaN(quantity) || quantity <= 0) {
       setChargeError("Enter a valid quantity.");
       addToast("Enter a valid quantity.", "error");
+      setAddingCharge(false);
       return;
     }
     try {
@@ -176,6 +184,7 @@ export const VisitPage = ({
       if (rpcError) {
         setChargeError(rpcError.message || "Failed to add charge.");
         addToast(rpcError.message || "Failed to add charge.", "error");
+        setAddingCharge(false);
         return;
       }
 
@@ -207,6 +216,7 @@ export const VisitPage = ({
 
       if (refetchError) {
         addToast("Charge added, but failed to refresh the list. Please reload.", "error");
+        setAddingCharge(false);
         return;
       }
 
@@ -222,12 +232,16 @@ export const VisitPage = ({
     } catch (err: any) {
       setChargeError(err.message || "Failed to add charge.");
       addToast(err.message || "Failed to add charge.", "error");
+    } finally {
+      setAddingCharge(false);
     }
   };
 
   const handleRemoveCharge = async (id: string) => {
     // Save previous state in case we need to revert
     const previousCharges = visitCharges;
+
+    setRemovingChargeId(id);
 
     // Optimistically remove immediately
     setVisitCharges((prev: any[]) => prev.filter((c) => c.id !== id));
@@ -242,6 +256,7 @@ export const VisitPage = ({
         // Revert optimistic removal on server error
         setVisitCharges(previousCharges);
         addToast(deleteError.message || "Failed to remove charge from server.", "error");
+        setRemovingChargeId(null);
         return;
       }
 
@@ -256,6 +271,7 @@ export const VisitPage = ({
 
       if (refetchError) {
         addToast("Charge removed, but failed to sync with server. Please reload.", "error");
+        setRemovingChargeId(null);
         return;
       }
 
@@ -271,6 +287,8 @@ export const VisitPage = ({
       // Revert optimistic removal on exception
       setVisitCharges(previousCharges);
       addToast(err.message || "Failed to remove charge.", "error");
+    } finally {
+      setRemovingChargeId(null);
     }
   };
 
@@ -445,17 +463,20 @@ export const VisitPage = ({
         })
         .eq("id", invoiceId);
 
-      // 7. Mark the visit as completed
-      const { error: visitError } = await supabase
-        .from("visits")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", visitId);
+      // 7. Mark the visit as completed via RPC, then refresh data immediately
+      await completeVisit({
+        history: consultForm.history || "",
+        examination: consultForm.examination || "",
+        diagnosis: consultForm.diagnosis || "",
+        plan: consultForm.plan || "",
+        doctor_id: userId,
+        prescriptions: prescriptionsForm,
+      });
 
-      if (visitError) throw visitError;
+      // Refresh all visit data so the completed status shows without reloading
+      await queryClient.invalidateQueries({ queryKey: ['visit', visitId] });
+      await queryClient.invalidateQueries({ queryKey: ['visit-consultation', visitId] });
+      await queryClient.invalidateQueries({ queryKey: ['visit-prescriptions', visitId] });
 
       addToast("Visit completed successfully!", "success");
     } catch (err: any) {
@@ -1042,6 +1063,8 @@ export const VisitPage = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleRemoveCharge(c.id as string)}
+                    isLoading={removingChargeId === c.id}
+                    disabled={removingChargeId === c.id}
                   >
                     Remove
                   </Button>
@@ -1101,7 +1124,7 @@ export const VisitPage = ({
             The charge is snapshot at the service's current price and added to
             the invoice when the visit is completed.
           </p>
-          <Button type="submit" className="w-full" isLoading={isSaving}>
+          <Button type="submit" className="w-full" isLoading={addingCharge}>
             Add Charge
           </Button>
         </form>
